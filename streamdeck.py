@@ -5,6 +5,11 @@ import requests
 arduino = serial.Serial(port='COM8', baudrate=115200, timeout=0.1)
 base_url = "http://127.0.0.1:3333/v1/"
 
+### Define IDs here
+ID_BANK = {
+    'Corruption':'34567dac-cff2-4f9f-baee-c0e6cb47c90a',
+    
+}
 
 class KenkuFM(object):
     def __init__(self, url="127.0.0.1", port=3333, freshness=1):
