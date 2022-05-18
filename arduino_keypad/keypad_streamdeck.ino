@@ -1,5 +1,4 @@
 #include <Keypad.h>
-//#include <Encoder.h>
 
 const byte ROWS = 4;
 const byte COLS = 3;
@@ -10,23 +9,40 @@ char keys[ROWS][COLS] = {
   {'*','0','#'}
 };
 
+// LEONARDNO PINS
+// byte rowPins[ROWS] = {9, 10,11,12};
+// byte colPins[COLS] = {6,7,8};
+// const byte EncoderClockPin = 1;
+// const byte EncoderDataPin = 2;
+// const byte EncoderSwitchPin = 3;
+// const byte LEDPin = 5;
+
+// NANO PINS
 byte rowPins[ROWS] = {9, 10,11,12};
 byte colPins[COLS] = {6,7,8};
+const byte EncoderClockPin = 2;
+const byte EncoderDataPin = 3;
+const byte EncoderSwitchPin = 4;
+const byte LEDPin = 5;
+const byte statusPin=13;
+
 Keypad kpd = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
-const byte EncoderClockPin = 1;
-const byte EncoderDataPin = 2;
-const byte EncoderSwitchPin = 3;
-//Encoder knob(EncoderClockPin,EncoderDataPin);
-const byte LEDPin = 5;
 int instruction = 0;
+unsigned long successfulRequestTime = 0;
+int fadePeriod=2000;
 
-unsigned long loopCount;
-unsigned long startTime;
+// unsigned long loopCount;
+// unsigned long startTime;
 char lastKeyPress;
 long encPos=0;
-String msg;
-bool released = false;
+bool keypadReleased = false;
+bool rotSwitchReleased = false;
+int rotSwitchState;
+int prevSwitchState = HIGH;
+
+unsigned long lastDebounceTime = 0;
+unsigned long debounceDelay = 50;
 
 volatile uint8_t EncodeCTR;
 volatile int8_t EncodeDIR;
@@ -35,107 +51,65 @@ volatile uint8_t SwitchCtr;
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(115200);
-  loopCount=0;
-  startTime = millis();
-  msg = "";
-  Serial.println("Hello, Leo!");
+  Serial.begin(9600);
+  // loopCount=0;
+  // startTime = millis();
   //pinMode(EncoderSwitchPin, INPUT);
 
   pinMode(EncoderSwitchPin , INPUT_PULLUP); // switch is not powered by the + on the Encoder breakout
   pinMode(EncoderClockPin , INPUT);
   pinMode(EncoderDataPin , INPUT);
   pinMode(LEDPin , OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(EncoderSwitchPin), Switch, FALLING);
+  pinMode(statusPin, OUTPUT);
+  //attachInterrupt(digitalPinToInterrupt(EncoderSwitchPin), Switch, FALLING);
   attachInterrupt(digitalPinToInterrupt(EncoderClockPin), Encode, FALLING);
-
 }
 
 void loop() {
  
-  // if ( (millis() -startTime) > 5000) {
-  //   Serial.print("Average loops per second = ");
-  //   Serial.print( loopCount/5);
-  //   startTime=millis();
-  //   loopCount=0;
-  // }
-
   if (Serial.available() > 0) {
     instruction = Serial.read();
+    // if (instruction==)
     Serial.print("I Got ");
     Serial.println(instruction);
+    if (instruction==89) {
+      successfulRequestTime=millis();
+    } else {
+      successfulRequestTime=0;
+    }
+  }
+
+  if ((millis() - successfulRequestTime) < 1000) {
+    digitalWrite(statusPin, HIGH);
+  } else {
+    digitalWrite(statusPin, LOW);
   }
 
   char keyPress = kpd.getKey();
   if (!keyPress) {
-    released = true;
+    keypadReleased = true;
   }
-  if (keyPress && released) {
+  if (keyPress && keypadReleased) {
     Serial.println(keyPress);
     lastKeyPress = keyPress;
-  }// } else if (!keyPress) {
-  //   Serial.println("release");
-  // }
-
-  // if (EncoderChange || SwitchCtr) {
-  //   EncoderChange = 0;
-  //   Serial.print("EncodeCTR: ");
-  //   Serial.print(EncodeCTR);
-  //   Serial.print(" - ");
-  //   Serial.print(EncodeDIR);
-  //   Serial.println();
-  //   Serial.print("Switch Pressed ");
-  //   Serial.println(SwitchCtr);
-  //   SwitchCtr = 0;
-  // }
+  }
 
   if (EncoderChange) {
     EncoderChange = 0;
     if (EncodeDIR==1) {
       Serial.println("+");
-      digitalWrite(LEDPin, HIGH);
     } else {
       Serial.println("-");
-      digitalWrite(LEDPin, LOW);
     }
   }
 
-  if (SwitchCtr) {
-    Serial.println("S");
-    SwitchCtr = 0;
+  int reading = digitalRead(EncoderSwitchPin);
+  // Serial.println(reading);
+  if (reading != prevSwitchState) {
+    // Serial.println("Reset");
+    lastDebounceTime=millis();
   }
-
-  // newPos = knob.read();
-  // if (newPos != encPos) {
-  //   Serial.print("Position ");
-  //   Serial.println(newPos);
-  //   encPos=newPos;
-  // }
-
-}
-
-void Switch() {
-  static unsigned long DebounceTimer;
-  if ((unsigned long)(millis() - DebounceTimer) >= (400)) {
-    DebounceTimer = millis();
-    if (!SwitchCtr) {
-      SwitchCtr++;
-    }
-  }
-}
-void Encode() { // we know the clock pin is low so we only need to see what state the Data pin is and count accordingly
-  static unsigned long DebounceTimer;
-  if ((unsigned long)(millis() - DebounceTimer) >= (100)) { // standard blink without delay timer
-    DebounceTimer = millis();
-    if (digitalRead(EncoderDataPin) == LOW) // switch to LOW to reverse direction of Encoder counting
-    {
-      EncodeCTR++;
-      EncodeDIR=1;
-    }
-    else {
-      EncodeCTR--;
-      EncodeDIR=-1;
-    }
-    EncoderChange++;
-  }
-}
+  if ((millis() - lastDebounceTime) > debounceDelay) {
+    // Serial.println("L");
+    if (reading != rotSwitchState) { 
+      rot

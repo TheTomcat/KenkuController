@@ -2,8 +2,7 @@ import serial
 import time
 import requests
 
-arduino = serial.Serial(port='COM8', baudrate=115200, timeout=0.1)
-base_url = "http://127.0.0.1:3333/v1/"
+arduino = serial.Serial(port='COM10', baudrate=9600, timeout=0.1)
 
 ### Define IDs here
 ID_BANK = {
@@ -20,7 +19,7 @@ ID_BANK = {
 }
 
 class KenkuFM(object):
-    def __init__(self, url="127.0.0.1", port=3333, freshness=1):
+    def __init__(self, url="127.0.0.1", port=3333, freshness=1, response_handler=None):
         """Create bindings to the KenkuFM remote.
 
         URL and port are pretty self-explanatory.
@@ -40,6 +39,9 @@ class KenkuFM(object):
         self.timeout=freshness
         self._playlist_expiry=0
         self._soundboard_expiry=0
+        if response_handler is None:
+            response_handler = lambda *x: None
+        self.handle_response = response_handler
 
     @property
     def base_url(self):
@@ -67,17 +69,6 @@ class KenkuFM(object):
             self.update_soundboard_state()
             self._soundboard_expiry = time.time()+self.timeout
         return self._soundboard_state
-
-    def handle_response(self, response: requests.Response, message=""):
-        "Optional response handler. Mostly for debugging"
-        if message:
-            message = " " + message
-        match response.status_code:
-            case 200:
-                print(f"Success 200{message}: {response.json()}")
-            case _:
-                print(f"Error   {response.status_code}{message}: {response.json()}")
-        return response
 
     def soundboard_play(self, uuid:str):
         "Play the soundboard element corresponding to `uuid`"
@@ -191,8 +182,18 @@ class KenkuFM(object):
     
     def all_fade_out(self, over=0.2):
         self.is_faded = True
-        
-        
+    
+    def log(self, *message):
+        print(*message)
+       
+# class SerialListener(object):
+#     def __init__(self, port="COM10", baud=9600, timeout=0.1):
+#         self.arduino = serial.Serial(port=port, baudrate=baud, timeout=timeout)
+#     def send(self, message):
+#         return self.arduino.write(message)
+#     def recieve(self, d):
+#         return self.arduino.read(d)
+
 
 def handle_instruction(char, kenku:KenkuFM):
     match char:
@@ -200,6 +201,7 @@ def handle_instruction(char, kenku:KenkuFM):
             ...
         case char if char.startswith(b'1'):
             kenku.playlist_play(ID_BANK['Corruption'])
+            kenku.playlist_unpause()
             kenku.playlist_repeat('track')
             
         case char if char.startswith(b'2'):
@@ -247,15 +249,31 @@ def handle_instruction(char, kenku:KenkuFM):
         case _:
             return
     print(char)
-    
+
+def handle_response(response: requests.Response, message=""):
+    "Optional response handler. Mostly for debugging"
+    if message:
+        message = " " + message
+    match response.status_code:
+        case 200:
+            print(f"Success 200{message}: {response.json()}")
+            arduino.write(b"Y")
+        case _:
+            print(f"Error   {response.status_code}{message}: {response.json()}")
+    return response
 
 def loop():        
-    kenku = KenkuFM()
+    kenku = KenkuFM(response_handler=handle_response)
+    
     while True:
-        line = arduino.readline()
-        if line:
-            handle_instruction(line, kenku)
+        if arduino.in_waiting:
+            line = arduino.readline()
+            print(f"Serial: {line}")
+            if line:
+                handle_instruction(line, kenku)
         time.sleep(0.05)
+
+# arduino = serial.Serial(port='COM10', baudrate=9600, timeout=0.1)
 
 if __name__ == "__main__":
     loop()
