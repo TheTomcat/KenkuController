@@ -112,4 +112,51 @@ void loop() {
   if ((millis() - lastDebounceTime) > debounceDelay) {
     // Serial.println("L");
     if (reading != rotSwitchState) { 
-      rot
+      rotSwitchState = reading;
+    }
+    if (rotSwitchState == LOW && SwitchCtr==0) { 
+      SwitchCtr++;
+      Serial.println("S");
+    }
+    if (rotSwitchState==HIGH) {
+      SwitchCtr=0;
+    }
+  }
+  prevSwitchState = reading;
+  // if (SwitchCtr) {
+  //   Serial.println("S");
+  //   SwitchCtr = 0;
+  // }
+  analogWrite(LEDPin, 128+127*cos(2*PI/fadePeriod*millis()));
+
+}
+
+
+
+// void Switch() {
+//   static unsigned long DebounceTimer;
+//   if ((unsigned long)(millis() - DebounceTimer) >= (400)) {
+//     DebounceTimer = millis();
+//     if (!SwitchCtr) {
+//       SwitchCtr++;
+//     }
+//   }
+// } This worked on a leonardo, with multiple interrupts. For some reason, despite only requiring two interrupt pins, it doesn't want to work on a Nano
+
+
+void Encode() { // we know the clock pin is low so we only need to see what state the Data pin is and count accordingly
+  static unsigned long DebounceTimer;
+  if ((unsigned long)(millis() - DebounceTimer) >= (100)) { // standard blink without delay timer
+    DebounceTimer = millis();
+    if (digitalRead(EncoderDataPin) == LOW) // switch to LOW to reverse direction of Encoder counting
+    {
+      EncodeCTR++;
+      EncodeDIR=1;
+    }
+    else {
+      EncodeCTR--;
+      EncodeDIR=-1;
+    }
+    EncoderChange++;
+  }
+}
