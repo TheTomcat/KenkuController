@@ -8,6 +8,7 @@ authors = ["Thomas Vos <vossy01@gmail.com>"]
 python = "^3.10"
 pyserial = "^3.5"
 requests = "^2.27.1"
+PyYAML = "^6.0"
 
 [tool.poetry.dev-dependencies]
 

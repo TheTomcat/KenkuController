@@ -1,22 +1,7 @@
 import serial
 import time
 import requests
-
-arduino = serial.Serial(port='COM10', baudrate=9600, timeout=0.1)
-
-### Define IDs here
-ID_BANK = {
-    'Corruption':'34567dac-cff2-4f9f-baee-c0e6cb47c90a',
-    'Eternal War':'4f46398d-5405-4779-8b9e-9e130db128c6',
-    'RyG': '3cde1b56-61b1-4f06-b458-fb11162bb6fb',
-    'Diablo Rojo': 'f3c3335b-7a41-4a0d-bc3b-397caea407cd',
-    'Hanuman':'12113efa-b1d6-4d48-a156-f2e8c4f4c515',
-    'Tavern':'fb86dc01-25a4-4b56-9e8c-d0e48b444eb3',
-    'Library':'ea13c936-e7af-459f-ab1e-7d5949035c0f',
-    'Ambience':'0da5726a-dd14-4294-81a1-34de737d9e0d',
-    'Market':'',
-    'Sewer':''
-}
+import yaml
 
 class KenkuFM(object):
     def __init__(self, url="127.0.0.1", port=3333, freshness=1, response_handler=None):
@@ -70,14 +55,14 @@ class KenkuFM(object):
             self._soundboard_expiry = time.time()+self.timeout
         return self._soundboard_state
 
-    def soundboard_play(self, uuid:str):
-        "Play the soundboard element corresponding to `uuid`"
-        response = self.put(("soundboard","play"), {'id':uuid})
+    def soundboard_play(self, id:str):
+        "Play the soundboard element corresponding to `id`"
+        response = self.put(("soundboard","play"), {'id':id})
         return self.handle_response(response)
         
-    def soundboard_stop(self, uuid: str):
-        "Stop playing the soundboard element corresponding to `uuid`"
-        response = self.put(("soundboard","stop"), {'id':uuid})
+    def soundboard_stop(self, id: str):
+        "Stop playing the soundboard element corresponding to `id`"
+        response = self.put(("soundboard","stop"), {'id':id})
         return self.handle_response(response)
 
     def update_soundboard_state(self):
@@ -86,9 +71,10 @@ class KenkuFM(object):
         self._soundboard_state = response.json()
         return self.handle_response(response)
 
-    def playlist_play(self, uuid: str):
-        "Play the playlist/track corresponding to `uuid`"
-        response = self.put(("playlist","play"), {'id':uuid})
+    def playlist_play(self, id: str):
+        """Play the playlist/track corresponding to `id`. 
+        Known issue: if this is called twice with the same id, that music will stop playing, and will be unable to be restarted. Pausing/unpausing has no effect. """
+        response = self.put(("playlist","play"), {'id':id})
         return self.handle_response(response)
 
     def update_playlist_state(self):
@@ -132,7 +118,7 @@ class KenkuFM(object):
         response = self.put(("playlist","playback","shuffle"), {"shuffle":shuffle})
         return self.handle_response(response)
     
-    def playlist_repeat(self, repeat):
+    def playlist_repeat(self, repeat: str):
         response = self.put(("playlist","playback","repeat"), {"repeat":repeat})
         return self.handle_response(response)
 
@@ -145,18 +131,18 @@ class KenkuFM(object):
         self._playlist_state['repeat'] = next_rpt
         self._playlist_expiry += self.timeout
     
-    def playlist_volume_up(self, inc=0.05):
+    def playlist_volume_up(self, increment=0.05):
         "Increase the volume by 5 points"
         volume = self.playlist_state['volume']
-        volume = min(1, volume+inc)
+        volume = min(1, volume+float(increment))
         self.playlist_volume(volume)
         self._playlist_state['volume'] = volume
         self._playlist_expiry += self.timeout
 
-    def playlist_volume_down(self, inc=0.05):
+    def playlist_volume_down(self, decrement=0.05):
         "Decrease the volume by 5 points"
         volume = self.playlist_state['volume']
-        volume = max(0, volume-inc)
+        volume = max(0, volume-float(decrement))
         self.playlist_volume(volume)
         self._playlist_state['volume'] = volume
         self._playlist_expiry += self.timeout
@@ -171,109 +157,86 @@ class KenkuFM(object):
             self.playlist_unpause()
             self._playlist_state['playing']=True
         
-    def soundboard_toggle_play(self, uuid: str):
-        "Start or stop the element corresponding to `uuid`"
+    def soundboard_toggle_play(self, id: str):
+        "Start or stop the element corresponding to `id`"
         sounds = self.soundboard_state['sounds']
-        is_playing = list(filter(lambda x: x['id']==uuid, sounds))
+        is_playing = list(filter(lambda x: x['id']==id, sounds))
         if is_playing: # Stop
-            self.soundboard_stop(uuid)
+            self.soundboard_stop(id)
         else: # Start
-            self.soundboard_play(uuid)
+            self.soundboard_play(id)
     
-    def all_fade_out(self, over=0.2):
-        self.is_faded = True
+    def stop_all(self):
+        sounds = self.soundboard_state['sounds']
+        for sound in sounds:
+            self.soundboard_stop(sound['id'])
+        self.playlist_pause()
     
     def log(self, *message):
         print(*message)
        
-# class SerialListener(object):
-#     def __init__(self, port="COM10", baud=9600, timeout=0.1):
-#         self.arduino = serial.Serial(port=port, baudrate=baud, timeout=timeout)
-#     def send(self, message):
-#         return self.arduino.write(message)
-#     def recieve(self, d):
-#         return self.arduino.read(d)
+class SoundboardInterface(object):
+    def __init__(self, path_to_config):
+        with open(path_to_config, 'r') as f:
+            self.config = yaml.load(f.read(), Loader=yaml.BaseLoader)
+        # TODO: Check provided parameters for minimum requirements and validity
+        self._kenku_url = self.config['kenku'].get('url','127.0.0.1')
+        self._kenku_port = self.config['kenku'].get('port',3333)
+        self._kenku_freshness = self.config['kenku'].get('freshness',1)
+        self.kenku = KenkuFM(url=self._kenku_url,
+                             port=self._kenku_port,
+                             freshness=self._kenku_freshness)
+        self._serial_port=self.config['serial'].get('port')
+        self._serial_baud=self.config['serial'].get('baud',9600)
+        self._serial_timeoutt=self.config['serial'].get('timeout',0.1)
+        self._serial_opened = False
 
+        self.actions = self.config['keys']
+        for action in self.actions:
+            for command in self.actions[action]['commands']:
 
-def handle_instruction(char, kenku:KenkuFM):
-    match char:
-        case char if char.startswith(b'0'):
-            ...
-        case char if char.startswith(b'1'):
-            kenku.playlist_play(ID_BANK['Corruption'])
-            kenku.playlist_unpause()
-            kenku.playlist_repeat('track')
-            
-        case char if char.startswith(b'2'):
-            kenku.playlist_play(ID_BANK['Eternal War'])
-            kenku.playlist_repeat('track')
-            
-        case char if char.startswith(b'3'):
-            kenku.playlist_play(ID_BANK['Hanuman'])
-            kenku.playlist_repeat('track')
-
-        case char if char.startswith(b'4'):
-            kenku.playlist_play(ID_BANK['Diablo Rojo'])
-            kenku.playlist_repeat('track')
-
-        case char if char.startswith(b'5'):
-            kenku.playlist_play(ID_BANK['Ambience'])
-            kenku.playlist_repeat('track')
-            ...
-        case char if char.startswith(b'6'):
-            ...
-        case char if char.startswith(b'7'):
-            kenku.soundboard_toggle_play(ID_BANK['Library'])
-
-        case char if char.startswith(b'8'):
-            kenku.soundboard_toggle_play(ID_BANK['Tavern'])
-
-        case char if char.startswith(b'9'):
-            ...
-        case char if char.startswith(b'*'):
-            ...
-        case char if char.startswith(b'#'):
-            # Fade all out
-            sounds = kenku.soundboard_state['sounds']
-            for sound in sounds:
-                kenku.soundboard_stop(sound['id'])
-            for f in range(20,-1,-1):
-                kenku.playlist_volume_down()
-
-        case char if char.startswith(b'+'):
-            kenku.playlist_volume_up()
-        case char if char.startswith(b'-'):
-            kenku.playlist_volume_down()
-        case char if char.startswith(b'S'):
-            kenku.playlist_toggle_pause()
-        case _:
-            return
-    print(char)
-
-def handle_response(response: requests.Response, message=""):
-    "Optional response handler. Mostly for debugging"
-    if message:
-        message = " " + message
-    match response.status_code:
-        case 200:
-            print(f"Success 200{message}: {response.json()}")
-            arduino.write(b"Y")
-        case _:
-            print(f"Error   {response.status_code}{message}: {response.json()}")
-    return response
-
-def loop():        
-    kenku = KenkuFM(response_handler=handle_response)
+                if not isinstance(self.actions[action]['commands'][command], dict):
+                    self.actions[action]['commands'][command] = {}
     
-    while True:
-        if arduino.in_waiting:
-            line = arduino.readline()
-            print(f"Serial: {line}")
-            if line:
-                handle_instruction(line, kenku)
-        time.sleep(0.05)
+    def close_serial(self):
+        if self._serial_opened:
+            self.serial.close()
+    
+    def open_serial(self):
+        self.serial = serial.Serial(port=self._serial_port,
+                                    baudrate=self._serial_baud,
+                                    timeout=self._serial_timeoutt)
+        self._serial_opened=True
+    
+    def process_instruction(self, instruction: bytes):
+        str_rep = instruction.decode('ascii')[0]
+        print(f"Attempting to process {str_rep}: ", end="")
+        if str_rep in self.actions:
+            try:
+                commands = self.actions[str_rep]['commands']
+                for command in commands:
+                    print(f"Running -> {command}->{commands[command]}")
+                    self.kenku.__getattribute__(command)(**commands[command])
 
-# arduino = serial.Serial(port='COM10', baudrate=9600, timeout=0.1)
+            except KeyError as e:
+                raise e
+        else: 
+            print(f'{str_rep} not found')
+    
+    def loop(self):
+        try:
+            self.open_serial()
+            while True:
+                if self.serial.in_waiting:
+                    instruction = self.serial.readline()
+                    if instruction:
+                        if instruction.startswith(b'p'):
+                            self.serial.write(b'a')
+                        self.process_instruction(instruction)
+        finally:
+            self.close_serial()
 
 if __name__ == "__main__":
-    loop()
+    #loop()
+    interface = SoundboardInterface('config.yaml')
+    interface.loop()

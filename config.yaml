@@ -1,0 +1,61 @@
+kenku:
+  port: 3333
+  url: 127.0.0.1
+
+serial:
+  port: COM10
+  baud: 9600
+
+keys:
+  1:
+    commands: 
+      playlist_play:
+        id: 34567dac-cff2-4f9f-baee-c0e6cb47c90a
+      playlist_repeat:
+        repeat: track
+  2:
+    commands: 
+      playlist_play:
+        id: 4f46398d-5405-4779-8b9e-9e130db128c6
+      playlist_repeat:
+        repeat: track
+  3:
+    commands: 
+      playlist_play:
+        id: 12113efa-b1d6-4d48-a156-f2e8c4f4c515
+      playlist_repeat:
+        repeat: track
+  4:
+    commands: 
+      playlist_play:
+        id: f3c3335b-7a41-4a0d-bc3b-397caea407cd
+      playlist_repeat:
+        repeat: track
+  5:
+    commands: 
+      playlist_play:
+        id: 0da5726a-dd14-4294-81a1-34de737d9e0d
+      playlist_repeat:
+        repeat: track
+  7:
+    commands: 
+      soundboard_toggle_play:
+        id: ea13c936-e7af-459f-ab1e-7d5949035c0f
+  8: 
+    commands: 
+      soundboard_toggle_play:
+        id: fb86dc01-25a4-4b56-9e8c-d0e48b444eb3
+  S:
+    commands: 
+      playlist_toggle_pause:
+  +:
+    commands: 
+      playlist_volume_up:
+        increment: 0.05
+  -:
+    commands: 
+      playlist_volume_down:
+        decrement: 0.05
+  '#':
+    commands: 
+      stop_all:
