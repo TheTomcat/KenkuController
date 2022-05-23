@@ -210,19 +210,22 @@ class SoundboardInterface(object):
     
     def process_instruction(self, instruction: bytes):
         str_rep = instruction.decode('ascii')[0]
-        print(f"Attempting to process {str_rep}: ", end="")
+        self.log(f"Cmd {str_rep}: ", end="")
         if str_rep in self.actions:
             try:
                 commands = self.actions[str_rep]['commands']
                 for command in commands:
-                    print(f"Running -> {command}->{commands[command]}")
+                    self.log(f"Exec -> {command}->{commands[command]}")
                     self.kenku.__getattribute__(command)(**commands[command])
-
+                self.serial.write(b'Y')
             except KeyError as e:
                 raise e
         else: 
-            print(f'{str_rep} not found')
+            self.log(f'{str_rep} not found')
     
+    def log(self, *args, **kwargs):
+        print(*args, **kwargs)
+
     def loop(self):
         try:
             self.open_serial()
@@ -232,8 +235,11 @@ class SoundboardInterface(object):
                     if instruction:
                         if instruction.startswith(b'p'):
                             self.serial.write(b'a')
+                            continue
                         self.process_instruction(instruction)
+                        
         finally:
+            self.log("closing gracefully...")
             self.close_serial()
 
 if __name__ == "__main__":
