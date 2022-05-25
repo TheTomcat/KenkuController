@@ -1,11 +1,14 @@
 import serial
 from serial.tools import list_ports
+from serial.serialutil import SerialException
 import time
 import requests
+from requests.exceptions import ConnectionError
+import urllib3
 import yaml
 
 class KenkuFM(object):
-    def __init__(self, url="127.0.0.1", port=3333, freshness=1, response_handler=None):
+    def __init__(self, url="127.0.0.1", port=3333, freshness=1):
         """Create bindings to the KenkuFM remote.
 
         URL and port are pretty self-explanatory.
@@ -25,9 +28,9 @@ class KenkuFM(object):
         self.timeout=freshness
         self._playlist_expiry=0
         self._soundboard_expiry=0
-        if response_handler is None:
-            response_handler = lambda *x: None
-        self.handle_response = response_handler
+        # if response_handler is None:
+        #     response_handler = lambda *x: None
+        # self.handle_response = response_handler
 
     @property
     def base_url(self):
@@ -36,7 +39,10 @@ class KenkuFM(object):
         return self.base_url + "/".join(path)
 
     def put(self, path, json_payload=None):
+        #try:
         return requests.put(self.make_url(*path), json=json_payload)
+        #except ConnectionError as e:
+            #return 
     def get(self, path):
         return requests.get(self.make_url(*path))
     def post(self, path):
@@ -56,72 +62,72 @@ class KenkuFM(object):
             self._soundboard_expiry = time.time()+self.timeout
         return self._soundboard_state
 
-    def soundboard_play(self, id:str):
+    def soundboard_play(self, id:str, **kwargs):
         "Play the soundboard element corresponding to `id`"
         response = self.put(("soundboard","play"), {'id':id})
-        return self.handle_response(response)
+        return response
         
-    def soundboard_stop(self, id: str):
+    def soundboard_stop(self, id: str, **kwargs):
         "Stop playing the soundboard element corresponding to `id`"
         response = self.put(("soundboard","stop"), {'id':id})
-        return self.handle_response(response)
+        return response
 
     def update_soundboard_state(self):
         "Get the state of the soundboard"
         response = self.get(("soundboard","playback"))
         self._soundboard_state = response.json()
-        return self.handle_response(response)
+        return response
 
-    def playlist_play(self, id: str):
+    def playlist_play(self, id: str, **kwargs):
         """Play the playlist/track corresponding to `id`. 
         Known issue: if this is called twice with the same id, that music will stop playing, and will be unable to be restarted. Pausing/unpausing has no effect. """
         response = self.put(("playlist","play"), {'id':id})
-        return self.handle_response(response)
+        return response
 
     def update_playlist_state(self):
         "Get the state of the playlist"
         response = self.get(("playlist","playback"))
         self._playlist_state = response.json()
-        return self.handle_response(response)
+        return response
 
     def playlist_unpause(self):
         "Unpause the currently playing track"
         response = self.put(("playlist","playback","play"))
-        return self.handle_response(response)
+        return response
     
     def playlist_pause(self):
         "Pause the currently playing track"
         response = self.put(("playlist","playback","pause"))
-        return self.handle_response(response)
+        return response
     
     def playlist_next(self):
         "Advance to the next track in the playlist"
         response = self.put(("playlist","playback","next"))
-        return self.handle_response(response)
+        return response
     
     def playlist_prev(self):
         "Return to the previous track in the playlist"
         response = self.put(("playlist","playback","previous"))
-        return self.handle_response(response)
+        return response
     
     def playlist_mute(self, mute: bool):
         "Set the mute mode of the player to `mute` (Bool, True or False)"
         response = self.put(("playlist","playback","mute"), {"mute":mute})
-        return self.handle_response(response)
+        return response
     
     def playlist_volume(self, volume: float):
         "Set the volume to `volume`. Value in the range 0-1"
         response = self.put(("playlist","playback","volume"), {"volume":volume})
-        return self.handle_response(response)
+        return response
 
     def playlist_shuffle(self, shuffle: bool):
         "Set the shuffle mode to `shuffle` (Bool, True or False)"
         response = self.put(("playlist","playback","shuffle"), {"shuffle":shuffle})
-        return self.handle_response(response)
+        return response
     
     def playlist_repeat(self, repeat: str):
         response = self.put(("playlist","playback","repeat"), {"repeat":repeat})
-        return self.handle_response(response)
+        return response
 
     def playlist_repeat_rot(self):
         "Rotate through repeat modes (off, playlist, track)"
@@ -177,6 +183,7 @@ class SoundboardInterface(object):
     def __init__(self, path_to_config):
         with open(path_to_config, 'r') as f:
             self.config = yaml.load(f.read(), Loader=yaml.BaseLoader)
+        #self.process_config() ## TODO: this will be necessary later
         self._kenku_url = self.config['kenku'].get('url','127.0.0.1')
         self._kenku_port = self.config['kenku'].get('port',3333)
         self._kenku_freshness = self.config['kenku'].get('freshness',1)
@@ -195,6 +202,9 @@ class SoundboardInterface(object):
                 if not isinstance(self.actions[action]['commands'][command], dict):
                     self.actions[action]['commands'][command] = {}
     
+    def process_config(self):
+        raise NotImplementedError
+
     def close_serial(self):
         if self._serial_opened:
             self.serial.close()
@@ -202,10 +212,13 @@ class SoundboardInterface(object):
     def open_serial(self):
         if self._serial_port == 'auto':
             # Attempt to autodetect the serial port
+            self.log('Attempting to autodetect serial port: ', end="")
             comports = list_ports.comports()
             for port in comports:
                 if ('arduino' in port.description.lower() or
-                    'ftdi' in port.description.lower()):
+                    'ftdi' in port.description.lower() or
+                    'ch340' in port.description.lower()):
+                    self.log(f"Found port at {port.name}:{port.description}")
                     self._serial_port = port.name
                     break
             if self._serial_port == 'auto':
@@ -213,23 +226,35 @@ class SoundboardInterface(object):
         self.serial = serial.Serial(port=self._serial_port,
                                     baudrate=self._serial_baud,
                                     timeout=self._serial_timeoutt)
+        self.log('Connected!')
         self._serial_opened=True
     
     def process_instruction(self, instruction: bytes):
         str_rep = instruction.decode('ascii')[0]
-        self.log(f"Cmd {str_rep}: ", end="")
+        self.log(f"RCV {str_rep}: ", end="")
         if str_rep in self.actions:
             try:
                 commands = self.actions[str_rep]['commands']
                 for command in commands:
                     self.log(f"Exec -> {command}->{commands[command]}")
                     self.kenku.__getattribute__(command)(**commands[command])
-                self.serial.write(b'Y')
+                
+                self.acknowledge()
             except KeyError as e:
                 raise e
+            except ConnectionError as e:
+                self.log("ERR Unable to connect to Kenku FM instance")
         else: 
             self.log(f'{str_rep} not found')
+
+    def acknowledge(self):
+        self.log("ACK")
+        self.serial.write(b"Y")
     
+    def pong(self):
+        self.serial.write(b'a')
+        self.log("Pong")
+
     def log(self, *args, **kwargs):
         print(*args, **kwargs)
 
@@ -237,16 +262,19 @@ class SoundboardInterface(object):
         try:
             self.open_serial()
             while True:
+                time.sleep(0.01)
                 if self.serial.in_waiting:
                     instruction = self.serial.readline()
                     if instruction:
                         if instruction.startswith(b'p'):
-                            self.serial.write(b'a')
+                            self.log("Ping->",end="")
+                            self.pong()
                             continue
                         self.process_instruction(instruction)
-                        
+        except SerialException as e:
+            self.log(f"ERR Unable to establish a serial connection at {self._serial_port}")
         finally:
-            self.log("closing gracefully...")
+            self.log("Closing gracefully...")
             self.close_serial()
 
 if __name__ == "__main__":
