@@ -1,0 +1,17 @@
+# Kenku Controller
+This is an arduino sketch and a python script to control [Kenku FM](https://www.kenku.fm/) from hardware, for tabletop RPG. 
+
+## Usage
+Firstly you need to install Kenku FM from [here](https://www.kenku.fm/). Set up some playlists and soundboards. Enable the kenku remote (under the connect to discord link).
+
+Flash the keypad_streamdeck.ino sketch to your arduino. 
+
+Run the python script. 
+
+## Configuration
+The config.yaml.sample file provides an example configuration
+
+## How it works
+The arduino pings the serial port every 10 seconds. This response is aknowledged by the python script.
+
+It also sends commands which are interpreted by the python script, which accesses appropriate 
