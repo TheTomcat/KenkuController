@@ -1,4 +1,5 @@
 import serial
+from serial.tools import list_ports
 import time
 import requests
 import yaml
@@ -171,22 +172,18 @@ class KenkuFM(object):
         for sound in sounds:
             self.soundboard_stop(sound['id'])
         self.playlist_pause()
-    
-    def log(self, *message):
-        print(*message)
        
 class SoundboardInterface(object):
     def __init__(self, path_to_config):
         with open(path_to_config, 'r') as f:
             self.config = yaml.load(f.read(), Loader=yaml.BaseLoader)
-        # TODO: Check provided parameters for minimum requirements and validity
         self._kenku_url = self.config['kenku'].get('url','127.0.0.1')
         self._kenku_port = self.config['kenku'].get('port',3333)
         self._kenku_freshness = self.config['kenku'].get('freshness',1)
         self.kenku = KenkuFM(url=self._kenku_url,
                              port=self._kenku_port,
                              freshness=self._kenku_freshness)
-        self._serial_port=self.config['serial'].get('port')
+        self._serial_port=self.config['serial'].get('port', 'auto')
         self._serial_baud=self.config['serial'].get('baud',9600)
         self._serial_timeoutt=self.config['serial'].get('timeout',0.1)
         self._serial_opened = False
@@ -203,6 +200,16 @@ class SoundboardInterface(object):
             self.serial.close()
     
     def open_serial(self):
+        if self._serial_port == 'auto':
+            # Attempt to autodetect the serial port
+            comports = list_ports.comports()
+            for port in comports:
+                if ('arduino' in port.description.lower() or
+                    'ftdi' in port.description.lower()):
+                    self._serial_port = port.name
+                    break
+            if self._serial_port == 'auto':
+                raise ConnectionError(f"invalid port - Unable to automatically detect serial port")
         self.serial = serial.Serial(port=self._serial_port,
                                     baudrate=self._serial_baud,
                                     timeout=self._serial_timeoutt)
