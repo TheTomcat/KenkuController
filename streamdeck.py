@@ -164,7 +164,7 @@ class KenkuFM(object):
             self.playlist_unpause()
             self._playlist_state['playing']=True
         
-    def soundboard_toggle_play(self, id: str):
+    def soundboard_toggle_play(self, **kwargs):
         "Start or stop the element corresponding to `id`"
         sounds = self.soundboard_state['sounds']
         is_playing = list(filter(lambda x: x['id']==id, sounds))
@@ -258,7 +258,7 @@ class SoundboardInterface(object):
     def log(self, *args, **kwargs):
         print(*args, **kwargs)
 
-    def loop(self):
+    def run(self):
         try:
             self.open_serial()
             while True:
@@ -278,6 +278,5 @@ class SoundboardInterface(object):
             self.close_serial()
 
 if __name__ == "__main__":
-    #loop()
     interface = SoundboardInterface('config.yaml')
-    interface.loop()
+    interface.run()
