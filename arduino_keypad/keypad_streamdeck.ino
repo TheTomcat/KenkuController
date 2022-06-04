@@ -8,6 +8,8 @@ char keys[ROWS][COLS] = {
   {'7','8','9'},
   {'*','0','#'}
 };
+// Rows - 2, 7, 6, 4
+// Cols - 3, 1, 5
 
 // LEONARDNO PINS
 // byte rowPins[ROWS] = {9, 10,11,12};
@@ -16,10 +18,12 @@ char keys[ROWS][COLS] = {
 // const byte EncoderDataPin = 2;
 // const byte EncoderSwitchPin = 3;
 // const byte LEDPin = 5;
-
 // NANO PINS
-byte rowPins[ROWS] = {9, 10,11,12};
-byte colPins[COLS] = {6,7,8};
+//byte rowPins[ROWS] = {9, 10,11,12};
+//byte colPins[COLS] = {6,7,8};
+
+byte rowPins[ROWS] = {9,8,7,6};
+byte colPins[COLS] = {12,11,10};
 const byte EncoderClockPin = 2;
 const byte EncoderDataPin = 3;
 const byte EncoderSwitchPin = 4;
