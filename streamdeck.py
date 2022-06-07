@@ -166,6 +166,7 @@ class KenkuFM(object):
         
     def soundboard_toggle_play(self, **kwargs):
         "Start or stop the element corresponding to `id`"
+        id = kwargs['id']
         sounds = self.soundboard_state['sounds']
         is_playing = list(filter(lambda x: x['id']==id, sounds))
         if is_playing: # Stop
